@@ -329,17 +329,22 @@ func HandleUserInput(numberOfPages int, contentSel *goquery.Selection, options [
 		s := string(b)
 
 		if isReadingQuery || isQueryOnly {
+
+			// Char input mode
+
 			if shouldOverwrite {
 				shouldOverwrite = false
 				OverwriteCurrentLine(Spaces(24), true)
 				PrintGoTo()
 			}
-			if b == 27 && !isQueryOnly { // escape
+
+			switch {
+			case b == 27 && !isQueryOnly:
 				isReadingQuery = false
 				query = ""
 				HandleArticle(doc, paragraphIndex, isDisamiguous)
-				break
-			} else if s == "\n" { // enter
+				return
+			case s == "\n":
 				words := strings.Split(query, " ")
 				if !isQueryOnly && doc != nil {
 					docStack.Push(&StackItem{doc, paragraphIndex, isDisamiguous})
@@ -350,22 +355,25 @@ func HandleUserInput(numberOfPages int, contentSel *goquery.Selection, options [
 					Alert()
 					shouldOverwrite = true
 				} else {
-					break
+					return
 				}
-			} else if b == 127 { // backspace
+			case b == 127:
 				if len(query) > 0 {
 					Backspace()
 					query = query[:len(query)-1]
 				} else {
 					Alert()
 				}
-			} else {
+			default:
 				fmt.Print(s)
 				query += s
 			}
 		} else if isQueryOnly {
 			Alert()
 		} else {
+
+			// Readline input mode
+
 			s = strings.ToLower(s)
 			switch {
 			case s == "o":
@@ -567,7 +575,8 @@ func IsValid(text string) bool {
 func GetHrefValue(s *goquery.Selection) (string, bool) {
 	val, exists := s.Attr("href")
 	titleAttr, titleExists := s.Attr("title")
-	if exists && (strings.HasPrefix(val, "/wiki/") || strings.HasPrefix(val, "/w/")) && len(s.Text()) > 1 && (!titleExists || !strings.HasPrefix(titleAttr, "Help:IPA")) {
+	if exists && (strings.HasPrefix(val, "/wiki/") || strings.HasPrefix(val, "/w/")) && len(s.Text()) > 1 &&
+		(!titleExists || (!strings.HasPrefix(titleAttr, "Help:IPA") && !strings.HasPrefix(titleAttr, "Wikipedia:Citation needed"))) {
 		return val, true
 	} else {
 		return val, false
