@@ -64,7 +64,7 @@ func main() {
 	docStack = new(Stack)
 
 	if len(os.Args) <= 1 {
-		HandleEmptyQuery()
+		HandleEmptyQuery(Bold("Welcome to Wiki4Term"))
 	} else {
 		args := os.Args[1:]
 		query := BuildQuery(args)
@@ -104,14 +104,16 @@ func HandleNotFound() bool {
 		return false
 	} else {
 		ClearScrean()
-		fmt.Printf("\n  Wikipedia does not have an article with this exact name.\n\n  Enter a term: ")
-		HandleUserInput(0, nil, nil, true)
+		HandleEmptyQuery("Article not found")
 		return true
 	}
 }
 
-func HandleEmptyQuery() {
-	fmt.Print("\n" + Bold("  Welcome to Wiki4Term") + "\n\n  Enter a term: ")
+func HandleEmptyQuery(str string) {
+	winSize, _ := GetWinsize()
+	PrintCentered(str, winSize)
+	PrintCommands(winSize)
+	PrintGoTo()
 	HandleUserInput(0, nil, nil, true)
 }
 
@@ -300,13 +302,13 @@ func PrintCommands(winSize *WinSize) {
 func PrintGoTo() {
 	fmt.Print("Go to: ")
 }
-func HandleUserInput(numberOfPages int, contentSel *goquery.Selection, options []Ref, isQueryOnly bool) {
+func HandleUserInput(numberOfPages int, contentSel *goquery.Selection, options []Ref, isInputMode bool) {
 
 	var doc *goquery.Document
 	var paragraphIndex int
 	var isDisamiguous bool
 
-	if !isQueryOnly {
+	if !isInputMode {
 		if currentArticle == nil {
 			return
 		}
@@ -321,14 +323,14 @@ func HandleUserInput(numberOfPages int, contentSel *goquery.Selection, options [
 
 	for {
 		b, resized := ReadChar()
-		if resized && !isQueryOnly {
+		if resized && !isInputMode {
 			HandleArticle(doc, paragraphIndex, isDisamiguous)
 			break
 		}
 
 		s := string(b)
 
-		if isReadingQuery || isQueryOnly {
+		if isReadingQuery || isInputMode {
 
 			// Char input mode
 
@@ -339,14 +341,21 @@ func HandleUserInput(numberOfPages int, contentSel *goquery.Selection, options [
 			}
 
 			switch {
-			case b == 27 && !isQueryOnly:
+			case b == 27:
 				isReadingQuery = false
 				query = ""
-				HandleArticle(doc, paragraphIndex, isDisamiguous)
-				return
+				if doc != nil {
+					HandleArticle(doc, paragraphIndex, isDisamiguous)
+					return
+				} else {
+					OverwriteCurrentLine(Spaces(24), true)
+					SetCursorVisible(false)
+					isInputMode = false
+					break
+				}
 			case s == "\n":
 				words := strings.Split(query, " ")
-				if !isQueryOnly && doc != nil {
+				if !isInputMode && doc != nil {
 					docStack.Push(&StackItem{doc, paragraphIndex, isDisamiguous})
 				}
 				if !QueryAbstract(BuildQuery(words)) {
@@ -368,10 +377,7 @@ func HandleUserInput(numberOfPages int, contentSel *goquery.Selection, options [
 				fmt.Print(s)
 				query += s
 			}
-		} else if isQueryOnly {
-			Alert()
 		} else {
-
 			// Readline input mode
 
 			s = strings.ToLower(s)

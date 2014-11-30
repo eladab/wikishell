@@ -87,13 +87,25 @@ func Truncate(str string, width int, pad bool) string {
 	}
 }
 
+func PrintCentered(str string, winSize *WinSize) {
+	fmt.Print(EmptyLines((int(winSize.Row)-5)/2) + Spaces((int(winSize.Col)-len(str))/2) + str + "\n")
+}
+
 func Spaces(n int) string {
+	return RepeatString(n, " ")
+}
+
+func EmptyLines(n int) string {
+	return RepeatString(n, "\n")
+}
+
+func RepeatString(n int, str string) string {
 	if n <= 0 {
 		return ""
 	}
 	var buffer bytes.Buffer
 	for i := 0; i < n; i++ {
-		buffer.WriteString(" ")
+		buffer.WriteString(str)
 	}
 	return buffer.String()
 }
