@@ -1,8 +1,8 @@
-README
+# README #
 
 Wikipedia for Terminal
 
-Dependencies:
+### Dependencies: ###
 
 go get github.com/PuerkitoBio/goquery
 go get github.com/atotto/clipboard
