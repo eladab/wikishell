@@ -176,10 +176,14 @@ func PrintParagraph(contentSel *goquery.Selection, winSize *WinSize) []Ref {
 
 	paragraphText := contentSel.Text()
 	options := []Ref{}
+	// optionsMap := make(map[string]bool)
 
 	contentSel.Find("a").Each(func(i int, s *goquery.Selection) {
 		if val, valid := GetHrefValue(s); valid {
+			// if _, ok := optionsMap[val]; !ok {
 			options = append(options, Ref{val, s.Text()})
+			// optionsMap[val] = true
+			// }
 		}
 	})
 
@@ -459,10 +463,10 @@ func PreviousPage(doc *goquery.Document, paragraphIndex int, isDisamiguous bool)
 
 func HandleRefSelection(index int, options []Ref) (*goquery.Document, bool) {
 	i := index
+	if i == 0 {
+		i += 10
+	}
 	if i >= 0 && i <= len(options) {
-		if i == 0 {
-			i += 10
-		}
 		selected := options[i-1].url
 		url := "http://en.wikipedia.org" + selected
 		articleDoc, err := goquery.NewDocument(url)
