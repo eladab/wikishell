@@ -64,7 +64,7 @@ func main() {
 	docStack = new(Stack)
 
 	if len(os.Args) <= 1 {
-		HandleEmptyQuery(Bold("Welcome to Wiki4Term"))
+		HandleEmptyQuery(WikishellAscii())
 	} else {
 		args := os.Args[1:]
 		query := BuildQuery(args)
@@ -104,7 +104,7 @@ func HandleNotFound() bool {
 		return false
 	} else {
 		ClearScrean()
-		HandleEmptyQuery("Article not found")
+		HandleEmptyQuery(WikishellAscii())
 		return true
 	}
 }
@@ -529,8 +529,7 @@ func StartListening() {
 
 func ReadChar() (byte, bool) {
 	select {
-	case sig := <-winResizeChan:
-		fmt.Println(sig)
+	case <-winResizeChan:
 		return 0, true
 		break
 	case b := <-stdinChan:
@@ -600,4 +599,15 @@ func SetCurrentArticle(doc *goquery.Document, paragraphIndex int, isDisamiguous 
 	currentArticle.doc = doc
 	currentArticle.paragraphIndex = paragraphIndex
 	currentArticle.isDisamiguous = isDisamiguous
+}
+
+func WikishellAscii() (str string) {
+	str = "           _ _    _     _          _ _\n" +
+		"          (_) |  (_)   | |        | | |\n" +
+		" __      ___| | ___ ___| |__   ___| | |\n" +
+		" \\ \\ /\\ / / | |/ / / __| '_ \\ / _ \\ | |\n" +
+		"  \\ V  V /| |   <| \\__ \\ | | |  __/ | |\n" +
+		"   \\_/\\_/ |_|_|\\_\\_|___/_| |_|\\___|_|_|\n"
+	return
+
 }

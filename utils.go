@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strings"
 	"syscall"
 	"unsafe"
 )
@@ -95,7 +96,20 @@ func Truncate(str string, width int, pad bool) string {
 }
 
 func PrintCentered(str string, winSize *WinSize) {
-	fmt.Print(EmptyLines((int(winSize.Row)-5)/2) + Spaces((int(winSize.Col)-len(str))/2) + str + "\n")
+	lines := strings.Split(str, "\n")
+	var lineLen int
+	if len(lines) == 0 {
+		lineLen = len(str)
+		lines = append(lines, str)
+	} else {
+		lineLen = len(lines[0])
+	}
+
+	nEmpty := (int(winSize.Row) - (5 + len(lines))) / 2
+	fmt.Print(EmptyLines(nEmpty))
+	for _, s := range lines {
+		fmt.Print(Spaces((int(winSize.Col)-lineLen)/2) + s + "\n")
+	}
 }
 
 func Spaces(n int) string {
