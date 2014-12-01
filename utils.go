@@ -6,19 +6,26 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"syscall"
 	"unsafe"
 )
 
-const (
-	_TIOCGWINSZ = 1074295912 // on linux use 0x5413, On OSX use 1074295912
-)
+var _TIOCGWINSZ int
 
 type WinSize struct {
 	Row    uint16
 	Col    uint16
 	Xpixel uint16
 	Ypixel uint16
+}
+
+func init() {
+	if runtime.GOOS == "darwin" {
+		_TIOCGWINSZ = 1074295912
+	} else {
+		_TIOCGWINSZ = 0x5413
+	}
 }
 
 func GetWinsize() (*WinSize, error) {
