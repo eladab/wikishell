@@ -507,7 +507,7 @@ func PopArticle() bool {
 }
 
 func RemoveBrackets(s string) string {
-	reg, err := regexp.Compile("\\[([0-9]|citation needed)\\]")
+	reg, err := regexp.Compile("\\[([0-9]+|citation needed)\\]")
 	if err != nil {
 		log.Fatal(err)
 	}
