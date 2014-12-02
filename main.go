@@ -228,7 +228,7 @@ func PrintParagraph(doc *goquery.Document, paragraphIndex int, contentSel *goque
 	fmt.Println()
 
 	for i, ref := range options[:maxOptions] {
-		fmt.Printf("  (%d)\t%s\n", (i+1)%10, strings.Title(ref.text))
+		fmt.Printf("  (%d)\t%s\n", (i+1)%10, ref.text)
 	}
 	return options
 }
@@ -263,7 +263,7 @@ func PrintDisambiguationLinks(doc *goquery.Selection, pageIndex int, docTitle st
 					displayText = displayText[:(maxColumnWidth-3)] + "..."
 				}
 				fmt.Printf("  (%d)\t%s\n", (i+1)%10, displayText)
-				options = append(options, Ref{val, s.Text()})
+				options = append(options, Ref{val, strings.Title(s.Text())})
 			}
 		}
 	})
@@ -275,7 +275,7 @@ func FindOtherUsesRef(doc *goquery.Document, title string) (Ref, bool) {
 	if disambig.Length() > 0 {
 		val, exists := disambig.Attr("href")
 		if exists {
-			return Ref{val, "Other uses of " + Bold(title)}, true
+			return Ref{val, "Other uses of " + Bold(title) + " (disambiguation)"}, true
 		}
 	}
 	return Ref{}, false
