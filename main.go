@@ -15,7 +15,6 @@ import (
 	"math"
 	"os"
 	"os/signal"
-	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
@@ -386,6 +385,7 @@ func HandleUserInput(numberOfPages int, contentSel *goquery.Selection, options [
 				query += s
 			}
 		} else {
+
 			// Readline input mode
 
 			s = strings.ToLower(s)
@@ -504,15 +504,6 @@ func PopArticle() bool {
 	} else {
 		return false
 	}
-}
-
-func RemoveBrackets(s string) string {
-	reg, err := regexp.Compile("\\[([0-9]+|citation needed)\\]")
-	if err != nil {
-		log.Fatal(err)
-	}
-	modified := reg.ReplaceAllString(s, "")
-	return modified
 }
 
 func StartListening() {
