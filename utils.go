@@ -55,6 +55,7 @@ func ClearScrean() {
 func OverwriteCurrentLine(str string, positionCursorAtBeginning bool) {
 	winSize, _ := GetWinsize()
 	PositionCursor(0, int(winSize.Row))
+	fmt.Print("\033[K")
 	fmt.Print(str)
 	if positionCursorAtBeginning {
 		PositionCursor(0, int(winSize.Row))

@@ -39,7 +39,6 @@ type Ref struct {
 
 var docStack *Stack
 var currentArticle *StackItem
-var logfile *os.File
 var winResizeChan chan os.Signal
 var stdinChan chan []byte
 var errorChan chan error
@@ -103,17 +102,18 @@ func HandleNotFound() bool {
 	if currentArticle != nil {
 		return false
 	} else {
-		ClearScrean()
 		HandleEmptyQuery(WikishellAscii())
 		return true
 	}
 }
 
-func HandleEmptyQuery(str string) {
+func HandleEmptyQuery(title string) {
+	ClearScrean()
 	winSize, _ := GetWinsize()
-	PrintCentered(str, winSize)
+	PrintCentered(title, winSize)
 	PrintCommands(winSize)
 	PrintGoTo()
+	SetCursorVisible(true)
 	HandleUserInput(0, nil, nil, true)
 }
 
@@ -327,8 +327,12 @@ func HandleUserInput(numberOfPages int, contentSel *goquery.Selection, options [
 
 	for {
 		b, resized := ReadChar()
-		if resized && !isInputMode {
-			HandleArticle(doc, paragraphIndex, isDisamiguous)
+		if resized {
+			if isInputMode {
+				HandleEmptyQuery("")
+			} else {
+				HandleArticle(doc, paragraphIndex, isDisamiguous)
+			}
 			break
 		}
 
@@ -370,7 +374,7 @@ func HandleUserInput(numberOfPages int, contentSel *goquery.Selection, options [
 				} else {
 					return
 				}
-			case b == 127:
+			case b == 127 || b == 8:
 				if len(query) > 0 {
 					Backspace()
 					query = query[:len(query)-1]
