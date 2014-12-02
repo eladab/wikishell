@@ -42,14 +42,20 @@ var winResizeChan chan os.Signal
 var stdinChan chan []byte
 var errorChan chan error
 
+// var logfile *os.File
+
 func main() {
 
 	C.rawmodeon()
 	ToggleAlternateScreen(true)
 	SetCursorVisible(false)
 
+	// logfile, _ = os.Create("log")
+
 	defer func() {
 		RestoreShell()
+		// logfile.Sync()
+		// logfile.Close()
 	}()
 
 	stdinChan = make(chan []byte)
@@ -69,6 +75,11 @@ func main() {
 		QueryAbstract(query)
 	}
 }
+
+// func logToFile(str string) {
+// 	logfile.WriteString(str + "\n")
+// 	logfile.Sync()
+// }
 
 func BuildQuery(parts []string) string {
 	var buffer bytes.Buffer
@@ -154,7 +165,7 @@ func HandleArticle(doc *goquery.Document, paragraphIndex int, isDisamiguous bool
 	if isDisamiguous {
 		options = PrintDisambiguationLinks(validSel, paragraphIndex, docTitle)
 	} else {
-		options = PrintParagraph(contentSel, winSize)
+		options = PrintParagraph(doc, paragraphIndex, contentSel, docTitle, winSize)
 	}
 
 	fmt.Println()
@@ -171,18 +182,21 @@ func PrintTitle(doc *goquery.Document, paragraphIndex int, numOfParagraphs int) 
 	return title
 }
 
-func PrintParagraph(contentSel *goquery.Selection, winSize *WinSize) []Ref {
+func PrintParagraph(doc *goquery.Document, paragraphIndex int, contentSel *goquery.Selection, title string, winSize *WinSize) []Ref {
 
 	paragraphText := contentSel.Text()
 	options := []Ref{}
-	// optionsMap := make(map[string]bool)
+
+	if paragraphIndex == 0 {
+		disambig, exists := FindOtherUsesRef(doc, title)
+		if exists {
+			options = append(options, disambig)
+		}
+	}
 
 	contentSel.Find("a").Each(func(i int, s *goquery.Selection) {
 		if val, valid := GetHrefValue(s); valid {
-			// if _, ok := optionsMap[val]; !ok {
 			options = append(options, Ref{val, s.Text()})
-			// optionsMap[val] = true
-			// }
 		}
 	})
 
@@ -254,6 +268,17 @@ func PrintDisambiguationLinks(doc *goquery.Selection, pageIndex int, docTitle st
 		}
 	})
 	return
+}
+
+func FindOtherUsesRef(doc *goquery.Document, title string) (Ref, bool) {
+	disambig := doc.Find(".hatnote").Find(".mw-disambig")
+	if disambig.Length() > 0 {
+		val, exists := disambig.Attr("href")
+		if exists {
+			return Ref{val, "Other uses of " + Bold(title)}, true
+		}
+	}
+	return Ref{}, false
 }
 
 func MarkLinks(paragraphText string, options []Ref) string {
