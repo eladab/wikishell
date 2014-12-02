@@ -28,7 +28,7 @@ const (
 type StackItem struct {
 	doc            *goquery.Document
 	paragraphIndex int
-	isDisamiguous  bool
+	isDisambiguous bool
 }
 
 type Ref struct {
@@ -72,7 +72,7 @@ func main() {
 	} else {
 		args := os.Args[1:]
 		query := BuildQuery(args)
-		QueryAbstract(query)
+		QueryArticle(query)
 	}
 }
 
@@ -92,7 +92,7 @@ func BuildQuery(parts []string) string {
 	return buffer.String()
 }
 
-func QueryAbstract(query string) bool {
+func QueryArticle(query string) bool {
 	doc, err := goquery.NewDocument("http://en.wikipedia.org/wiki/" + query)
 	if err != nil {
 		log.Fatal(err)
@@ -127,7 +127,7 @@ func HandleEmptyQuery(title string) {
 	HandleUserInput(0, nil, nil, true)
 }
 
-func HandleArticle(doc *goquery.Document, paragraphIndex int, isDisamiguous bool) {
+func HandleArticle(doc *goquery.Document, paragraphIndex int, isDisambiguous bool) {
 
 	ClearScrean()
 	SetCursorVisible(false)
@@ -139,13 +139,13 @@ func HandleArticle(doc *goquery.Document, paragraphIndex int, isDisamiguous bool
 	var contentSel *goquery.Selection
 	var paragraphs *goquery.Selection
 
-	if !isDisamiguous {
+	if !isDisambiguous {
 		paragraphs = validSel.Children().Filter("p").NotFunction(func(i int, sel *goquery.Selection) bool {
 			return (len(sel.Text()) < 2)
 		})
 		contentSel = paragraphs.Eq(paragraphIndex)
 		if !IsValid(contentSel.Text()) && paragraphs.Length() > paragraphIndex+1 {
-			HandleArticle(doc, paragraphIndex+1, isDisamiguous)
+			HandleArticle(doc, paragraphIndex+1, isDisambiguous)
 			return
 		}
 		numberOfPages = paragraphs.Length()
@@ -162,7 +162,7 @@ func HandleArticle(doc *goquery.Document, paragraphIndex int, isDisamiguous bool
 	}
 
 	var options []Ref
-	if isDisamiguous {
+	if isDisambiguous {
 		options = PrintDisambiguationLinks(validSel, paragraphIndex, docTitle)
 	} else {
 		options = PrintParagraph(doc, paragraphIndex, contentSel, docTitle, winSize)
@@ -171,7 +171,7 @@ func HandleArticle(doc *goquery.Document, paragraphIndex int, isDisamiguous bool
 	fmt.Println()
 
 	PrintCommands(winSize)
-	SetCurrentArticle(doc, paragraphIndex, isDisamiguous)
+	SetCurrentArticle(doc, paragraphIndex, isDisambiguous)
 	HandleUserInput(numberOfPages, contentSel, options, false)
 }
 
@@ -334,7 +334,7 @@ func HandleUserInput(numberOfPages int, contentSel *goquery.Selection, options [
 
 	var doc *goquery.Document
 	var paragraphIndex int
-	var isDisamiguous bool
+	var isDisambiguous bool
 
 	if !isInputMode {
 		if currentArticle == nil {
@@ -342,7 +342,7 @@ func HandleUserInput(numberOfPages int, contentSel *goquery.Selection, options [
 		}
 		doc = currentArticle.doc
 		paragraphIndex = currentArticle.paragraphIndex
-		isDisamiguous = currentArticle.isDisamiguous
+		isDisambiguous = currentArticle.isDisambiguous
 	}
 
 	isReadingQuery := false
@@ -355,7 +355,7 @@ func HandleUserInput(numberOfPages int, contentSel *goquery.Selection, options [
 			if isInputMode {
 				HandleEmptyQuery("")
 			} else {
-				HandleArticle(doc, paragraphIndex, isDisamiguous)
+				HandleArticle(doc, paragraphIndex, isDisambiguous)
 			}
 			break
 		}
@@ -377,7 +377,7 @@ func HandleUserInput(numberOfPages int, contentSel *goquery.Selection, options [
 				isReadingQuery = false
 				query = ""
 				if doc != nil {
-					HandleArticle(doc, paragraphIndex, isDisamiguous)
+					HandleArticle(doc, paragraphIndex, isDisambiguous)
 					return
 				} else {
 					OverwriteCurrentLine(Spaces(24), true)
@@ -388,9 +388,9 @@ func HandleUserInput(numberOfPages int, contentSel *goquery.Selection, options [
 			case s == "\n":
 				words := strings.Split(query, " ")
 				if !isInputMode && doc != nil {
-					docStack.Push(&StackItem{doc, paragraphIndex, isDisamiguous})
+					docStack.Push(&StackItem{doc, paragraphIndex, isDisambiguous})
 				}
-				if !QueryAbstract(BuildQuery(words)) {
+				if !QueryArticle(BuildQuery(words)) {
 					query = ""
 					OverwriteCurrentLine("Article not found.", false)
 					Alert()
@@ -427,11 +427,11 @@ func HandleUserInput(numberOfPages int, contentSel *goquery.Selection, options [
 				isReadingQuery = true
 				break
 			case s == "n" || s == "\n":
-				if NextPage(doc, numberOfPages, paragraphIndex, isDisamiguous) {
+				if NextPage(doc, numberOfPages, paragraphIndex, isDisambiguous) {
 					return
 				}
 			case s == "p":
-				if PreviousPage(doc, paragraphIndex, isDisamiguous) {
+				if PreviousPage(doc, paragraphIndex, isDisambiguous) {
 					return
 				}
 			case s == "b":
@@ -444,7 +444,7 @@ func HandleUserInput(numberOfPages int, contentSel *goquery.Selection, options [
 				clipboard.WriteAll(doc.Url.String())
 				break
 			case s == "t":
-				if isDisamiguous || contentSel == nil {
+				if isDisambiguous || contentSel == nil {
 					Alert()
 				} else {
 					clipboard.WriteAll(contentSel.Text())
@@ -456,7 +456,7 @@ func HandleUserInput(numberOfPages int, contentSel *goquery.Selection, options [
 					Alert()
 				} else {
 					if selectedDoc, succeeded := HandleRefSelection(integer, options); succeeded {
-						docStack.Push(&StackItem{doc, paragraphIndex, isDisamiguous})
+						docStack.Push(&StackItem{doc, paragraphIndex, isDisambiguous})
 						HandleArticle(selectedDoc, 0, false)
 						return
 					} else {
@@ -468,10 +468,10 @@ func HandleUserInput(numberOfPages int, contentSel *goquery.Selection, options [
 	}
 }
 
-func NextPage(doc *goquery.Document, numberOfPages int, paragraphIndex int, isDisamiguous bool) bool {
+func NextPage(doc *goquery.Document, numberOfPages int, paragraphIndex int, isDisambiguous bool) bool {
 	if numberOfPages > paragraphIndex+1 {
-		docStack.Push(&StackItem{doc, paragraphIndex, isDisamiguous})
-		HandleArticle(doc, paragraphIndex+1, isDisamiguous)
+		docStack.Push(&StackItem{doc, paragraphIndex, isDisambiguous})
+		HandleArticle(doc, paragraphIndex+1, isDisambiguous)
 		return true
 	} else {
 		Alert()
@@ -479,10 +479,10 @@ func NextPage(doc *goquery.Document, numberOfPages int, paragraphIndex int, isDi
 	}
 }
 
-func PreviousPage(doc *goquery.Document, paragraphIndex int, isDisamiguous bool) bool {
+func PreviousPage(doc *goquery.Document, paragraphIndex int, isDisambiguous bool) bool {
 	if paragraphIndex > 0 {
-		docStack.Push(&StackItem{doc, paragraphIndex, isDisamiguous})
-		HandleArticle(doc, paragraphIndex-1, isDisamiguous)
+		docStack.Push(&StackItem{doc, paragraphIndex, isDisambiguous})
+		HandleArticle(doc, paragraphIndex-1, isDisambiguous)
 		return true
 	} else {
 		Alert()
@@ -524,7 +524,7 @@ func PopArticle() bool {
 	prevItem, exists := docStack.Pop()
 	if exists {
 		stackItem := prevItem.(*StackItem)
-		HandleArticle(stackItem.doc, stackItem.paragraphIndex, stackItem.isDisamiguous)
+		HandleArticle(stackItem.doc, stackItem.paragraphIndex, stackItem.isDisambiguous)
 		return true
 	} else {
 		return false
@@ -612,13 +612,13 @@ func GetHrefValue(s *goquery.Selection) (string, bool) {
 	}
 }
 
-func SetCurrentArticle(doc *goquery.Document, paragraphIndex int, isDisamiguous bool) {
+func SetCurrentArticle(doc *goquery.Document, paragraphIndex int, isDisambiguous bool) {
 	if currentArticle == nil {
 		currentArticle = new(StackItem)
 	}
 	currentArticle.doc = doc
 	currentArticle.paragraphIndex = paragraphIndex
-	currentArticle.isDisamiguous = isDisamiguous
+	currentArticle.isDisambiguous = isDisambiguous
 }
 
 func WikishellAscii() (str string) {
