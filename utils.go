@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"github.com/PuerkitoBio/goquery"
 	"log"
 	"os"
 	"os/exec"
@@ -84,18 +85,19 @@ func SetCursorVisible(visible bool) {
 	}
 }
 
-func Truncate(str string, width int, pad bool) string {
-	strLen := len(str)
-	strLenStripped := strLen - 15
-	if strLenStripped > width-1 {
-		truncation := Max(16, strLen-3-(strLenStripped-width))
-		newStr := str[:int(truncation)] + "..."
-		return newStr
-	} else if pad {
-		return str + Spaces(width-strLenStripped)
-	} else {
-		return str
-	}
+func PrintCommands(winSize *WinSize) {
+	PositionCursor(0, int(winSize.Row)-2)
+	optionWidth := int((winSize.Col - 4) / 4)
+	nextPage := Truncate(WhiteBackground("N")+" Next Page", optionWidth, true)
+	prevPage := Truncate(WhiteBackground("P")+" Previous Page", optionWidth, true)
+	back := Truncate(WhiteBackground("B")+" Back", optionWidth, true)
+	goTo := Truncate(WhiteBackground("G")+" Go To", optionWidth, false)
+	openInBrowser := Truncate(WhiteBackground("O")+" Open in Browser", optionWidth, true)
+	copyURL := Truncate(WhiteBackground("U")+" Copy URL", optionWidth, true)
+	copyText := Truncate(WhiteBackground("T")+" Copy Text", optionWidth, true)
+	quit := Truncate(WhiteBackground("Q")+" Quit", optionWidth, false)
+
+	fmt.Printf("  %s%s%s%s\n  %s%s%s%s\n", nextPage, prevPage, back, goTo, openInBrowser, copyURL, copyText, quit)
 }
 
 func PrintCentered(str string, winSize *WinSize) {
@@ -113,6 +115,87 @@ func PrintCentered(str string, winSize *WinSize) {
 	for _, s := range lines {
 		fmt.Print(Spaces((int(winSize.Col)-lineLen)/2) + s + "\n")
 	}
+}
+
+func PrintGoTo() {
+	fmt.Print("Go to: ")
+}
+
+func MarkLinks(paragraphText string, options []Ref) string {
+	var buffer bytes.Buffer
+	for _, option := range options {
+		index := strings.Index(paragraphText, option.text)
+		if index >= 0 {
+			buffer.WriteString(paragraphText[:index] + Underline(option.text))
+			paragraphText = paragraphText[index+len(option.text):]
+		}
+	}
+	buffer.WriteString(paragraphText)
+	paragraphText = buffer.String()
+	return paragraphText
+}
+
+func WikishellAscii() (str string) {
+	str = "           _ _    _     _          _ _\n" +
+		"          (_) |  (_)   | |        | | |\n" +
+		" __      ___| | ___ ___| |__   ___| | |\n" +
+		" \\ \\ /\\ / / | |/ / / __| '_ \\ / _ \\ | |\n" +
+		"  \\ V  V /| |   <| \\__ \\ | | |  __/ | |\n" +
+		"   \\_/\\_/ |_|_|\\_\\_|___/_| |_|\\___|_|_|\n"
+	return
+
+}
+
+func GetHrefValue(s *goquery.Selection) (string, bool) {
+	val, exists := s.Attr("href")
+	titleAttr, titleExists := s.Attr("title")
+	if exists && (strings.HasPrefix(val, "/wiki/") || strings.HasPrefix(val, "/w/")) && len(s.Text()) > 1 &&
+		(!titleExists || (!strings.HasPrefix(titleAttr, "Help:IPA") && !strings.HasPrefix(titleAttr, "Wikipedia:") && !strings.HasPrefix(titleAttr, "File:"))) {
+		return val, true
+	} else {
+		return val, false
+	}
+}
+
+func Truncate(str string, width int, pad bool) string {
+	strLen := len(str)
+	strLenStripped := strLen - 15
+	if strLenStripped > width-1 {
+		truncation := Max(16, strLen-3-(strLenStripped-width))
+		newStr := str[:int(truncation)] + "..."
+		return newStr
+	} else if pad {
+		return str + Spaces(width-strLenStripped)
+	} else {
+		return str
+	}
+}
+
+func TruncateParagraph(paragraphText string, options []Ref, winSize *WinSize) (string, int) {
+	maxOptions := Min(10, len(options))
+	length := len(paragraphText)
+	escapeLength := Min(10, len(options)) * 14
+	rows := (length - escapeLength) / int(winSize.Col-5)
+	availableRows := int(winSize.Row) - 9
+
+	if rows > availableRows {
+		maxOptions = 0
+		toIndex := Max(0, Min(length-1, length-(rows-availableRows+1)*int(winSize.Col-5)))
+		paragraphText = paragraphText[:toIndex] + "\033[0m..."
+	} else {
+		maxOptions = Min(maxOptions, availableRows-rows)
+	}
+	return paragraphText, maxOptions
+}
+
+func IsParagraphValid(text string) bool {
+	if len(text) == 0 {
+		return false
+	}
+	if strings.HasPrefix(text, "Coordinates: ") {
+		return false
+	}
+	return true
 }
 
 func Spaces(n int) string {

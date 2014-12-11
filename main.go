@@ -1,10 +1,5 @@
 package main
 
-/*
-#include "termutil.h"
-*/
-import "C"
-
 import (
 	"bytes"
 	"fmt"
@@ -14,10 +9,8 @@ import (
 	"log"
 	"math"
 	"os"
-	"os/signal"
 	"strconv"
 	"strings"
-	"syscall"
 )
 
 const (
@@ -25,19 +18,13 @@ const (
 	leftMargin = "  "
 )
 
-type StackItem struct {
-	doc            *goquery.Document
-	paragraphIndex int
-	isDisambiguous bool
-}
-
 type Ref struct {
 	url  string
 	text string
 }
 
 var docStack *Stack
-var currentArticle *StackItem
+var currentArticle *Article
 var winResizeChan chan os.Signal
 var stdinChan chan []byte
 var errorChan chan error
@@ -46,16 +33,12 @@ var errorChan chan error
 
 func main() {
 
-	C.rawmodeon()
+	SetRawModeEnabled(true)
 	ToggleAlternateScreen(true)
 	SetCursorVisible(false)
 
-	// logfile, _ = os.Create("log")
-
 	defer func() {
 		RestoreShell()
-		// logfile.Sync()
-		// logfile.Close()
 	}()
 
 	stdinChan = make(chan []byte)
@@ -75,11 +58,6 @@ func main() {
 		QueryArticle(query)
 	}
 }
-
-// func logToFile(str string) {
-// 	logfile.WriteString(str + "\n")
-// 	logfile.Sync()
-// }
 
 func BuildQuery(parts []string) string {
 	var buffer bytes.Buffer
@@ -103,7 +81,8 @@ func QueryArticle(query string) bool {
 		return HandleNotFound()
 	} else {
 		disambigBoxLength := doc.Find(".dmbox-disambig").Length()
-		HandleArticle(doc, 0, disambigBoxLength > 0)
+		article := NewArticle(doc, 0, disambigBoxLength > 0)
+		HandleArticle(article)
 		return true
 	}
 }
@@ -124,229 +103,52 @@ func HandleEmptyQuery(title string) {
 	PrintCommands(winSize)
 	PrintGoTo()
 	SetCursorVisible(true)
-	HandleUserInput(0, nil, nil, true)
+	HandleUserInput(nil, nil, true)
 }
 
-func HandleArticle(doc *goquery.Document, paragraphIndex int, isDisambiguous bool) {
+func HandleArticle(article *Article) {
 
 	ClearScrean()
 	SetCursorVisible(false)
 
 	winSize, _ := GetWinsize()
-	validSel := doc.Find(".mw-content-ltr")
+	validSel := article.doc.Find(".mw-content-ltr")
 
-	var numberOfPages int
 	var contentSel *goquery.Selection
 	var paragraphs *goquery.Selection
 
-	if !isDisambiguous {
+	if !article.isDisambiguous {
 		paragraphs = validSel.Children().Filter("p").NotFunction(func(i int, sel *goquery.Selection) bool {
 			return (len(sel.Text()) < 2)
 		})
-		contentSel = paragraphs.Eq(paragraphIndex)
-		if !IsValid(contentSel.Text()) && paragraphs.Length() > paragraphIndex+1 {
-			HandleArticle(doc, paragraphIndex+1, isDisambiguous)
+		contentSel = paragraphs.Eq(article.paragraphIndex)
+		if !IsParagraphValid(contentSel.Text()) && paragraphs.Length() > article.paragraphIndex+1 {
+			article.paragraphIndex += 1
+			HandleArticle(article)
 			return
 		}
-		numberOfPages = paragraphs.Length()
+		article.numberOfPages = paragraphs.Length()
 	} else {
-		numberOfListItems := GetLinkListItems(validSel).Length()
-		numberOfPages = int(math.Ceil(float64(numberOfListItems) / 10))
+		numberOfListItems := article.GetLinkListItems().Length()
+		article.numberOfPages = int(math.Ceil(float64(numberOfListItems) / 10))
 	}
 
-	var docTitle string
-	if numberOfPages > 0 {
-		docTitle = PrintTitle(doc, paragraphIndex+1, numberOfPages)
-	} else {
-		docTitle = ""
-	}
+	options := article.Process(contentSel, winSize)
 
-	var options []Ref
-	if isDisambiguous {
-		options = PrintDisambiguationLinks(validSel, paragraphIndex, docTitle)
-	} else {
-		options = PrintParagraph(doc, paragraphIndex, contentSel, docTitle, winSize)
-	}
-
-	fmt.Println()
-
-	PrintCommands(winSize)
-	SetCurrentArticle(doc, paragraphIndex, isDisambiguous)
-	HandleUserInput(numberOfPages, contentSel, options, false)
+	currentArticle = article
+	HandleUserInput(contentSel, options, false)
 }
 
-func PrintTitle(doc *goquery.Document, paragraphIndex int, numOfParagraphs int) string {
-	titleSel := doc.Find(".firstHeading")
-	title := titleSel.Text()
-	fmt.Printf("\n  %s\t[%d/%d]\n\n", Bold(strings.ToUpper(title)), paragraphIndex, numOfParagraphs)
-	return title
-}
-
-func PrintParagraph(doc *goquery.Document, paragraphIndex int, contentSel *goquery.Selection, title string, winSize *WinSize) []Ref {
-
-	paragraphText := contentSel.Text()
-	options := []Ref{}
-
-	if paragraphIndex == 0 {
-		disambig, exists := FindOtherUsesRef(doc, title)
-		if exists {
-			options = append(options, disambig)
-		}
-	}
-
-	contentSel.Find("a").Each(func(i int, s *goquery.Selection) {
-		if val, valid := GetHrefValue(s); valid {
-			options = append(options, Ref{val, s.Text()})
-		}
-	})
-
-	var buffer bytes.Buffer
-	words := strings.Split(paragraphText, " ")
-	buffer.WriteString(leftMargin)
-	currentLength := 0
-	maxColumnWidth := Min(int(winSize.Col)-4, maxWidth)
-
-	for _, word := range words {
-		wordLength := len(word)
-		if (currentLength + wordLength) > maxColumnWidth {
-			buffer.WriteString("\n  ")
-			currentLength = 0
-		}
-		buffer.WriteString(word)
-		buffer.WriteString(" ")
-		currentLength += wordLength + 1
-	}
-
-	paragraphText = buffer.String()
-	paragraphText = RemoveBrackets(paragraphText)
-	buffer.Reset()
-
-	paragraphText = MarkLinks(paragraphText, options)
-	paragraphToPrint, maxOptions := TruncateParagraph(paragraphText, options, winSize)
-
-	fmt.Println(paragraphToPrint)
-	fmt.Println()
-
-	for i, ref := range options[:maxOptions] {
-		fmt.Printf("  (%d)\t%s\n", (i+1)%10, ref.text)
-	}
-	return options
-}
-
-func PrintDisambiguationLinks(doc *goquery.Selection, pageIndex int, docTitle string) (options []Ref) {
-
-	fmt.Printf("  Articles associated with the title '%s':\n\n", docTitle)
-
-	fromPage := pageIndex * 10
-	toPage := fromPage + 10
-	winSize, _ := GetWinsize()
-	maxColumnWidth := int(winSize.Col) - 8
-	if maxColumnWidth > maxWidth {
-		maxColumnWidth = maxWidth
-	}
-	GetLinkListItems(doc).Each(func(i int, s *goquery.Selection) {
-		if i < fromPage || i >= toPage {
-			return
-		}
-		ahref := s.Find("a")
-		if ahref != nil {
-			val, exists := ahref.Attr("href")
-			if exists && (strings.HasPrefix(val, "/wiki/") || strings.HasPrefix(val, "/w/")) {
-				children := s.Children()
-				var displayText string
-				if children.Length() > 1 {
-					displayText = s.Children().First().Text()
-				} else {
-					displayText = s.Text()
-				}
-				if len(displayText) > maxColumnWidth {
-					displayText = displayText[:(maxColumnWidth-3)] + "..."
-				}
-				fmt.Printf("  (%d)\t%s\n", (i+1)%10, displayText)
-				options = append(options, Ref{val, strings.Title(s.Text())})
-			}
-		}
-	})
-	return
-}
-
-func FindOtherUsesRef(doc *goquery.Document, title string) (Ref, bool) {
-	disambig := doc.Find(".hatnote").Find(".mw-disambig")
-	if disambig.Length() > 0 {
-		val, exists := disambig.Attr("href")
-		if exists {
-			return Ref{val, "Other uses of " + Bold(title) + " (disambiguation)"}, true
-		}
-	}
-	return Ref{}, false
-}
-
-func MarkLinks(paragraphText string, options []Ref) string {
-	var buffer bytes.Buffer
-	for _, option := range options {
-		index := strings.Index(paragraphText, option.text)
-		if index >= 0 {
-			buffer.WriteString(paragraphText[:index] + Underline(option.text))
-			paragraphText = paragraphText[index+len(option.text):]
-		}
-	}
-	buffer.WriteString(paragraphText)
-	paragraphText = buffer.String()
-	return paragraphText
-}
-
-func TruncateParagraph(paragraphText string, options []Ref, winSize *WinSize) (string, int) {
-	maxOptions := Min(10, len(options))
-	length := len(paragraphText)
-	escapeLength := Min(10, len(options)) * 14
-	rows := (length - escapeLength) / int(winSize.Col-5)
-	availableRows := int(winSize.Row) - 9
-
-	if rows > availableRows {
-		maxOptions = 0
-		toIndex := Max(0, Min(length-1, length-(rows-availableRows+1)*int(winSize.Col-5)))
-		paragraphText = paragraphText[:toIndex] + "\033[0m..."
-	} else {
-		maxOptions = Min(maxOptions, availableRows-rows)
-	}
-	return paragraphText, maxOptions
-}
-
-func PrintCommands(winSize *WinSize) {
-	PositionCursor(0, int(winSize.Row)-2)
-	optionWidth := int((winSize.Col - 4) / 4)
-	nextPage := Truncate(WhiteBackground("N")+" Next Page", optionWidth, true)
-	prevPage := Truncate(WhiteBackground("P")+" Previous Page", optionWidth, true)
-	back := Truncate(WhiteBackground("B")+" Back", optionWidth, true)
-	goTo := Truncate(WhiteBackground("G")+" Go To", optionWidth, false)
-	openInBrowser := Truncate(WhiteBackground("O")+" Open in Browser", optionWidth, true)
-	copyURL := Truncate(WhiteBackground("U")+" Copy URL", optionWidth, true)
-	copyText := Truncate(WhiteBackground("T")+" Copy Text", optionWidth, true)
-	quit := Truncate(WhiteBackground("Q")+" Quit", optionWidth, false)
-
-	fmt.Printf("  %s%s%s%s\n  %s%s%s%s\n", nextPage, prevPage, back, goTo, openInBrowser, copyURL, copyText, quit)
-}
-
-func PrintGoTo() {
-	fmt.Print("Go to: ")
-}
-func HandleUserInput(numberOfPages int, contentSel *goquery.Selection, options []Ref, isInputMode bool) {
-
-	var doc *goquery.Document
-	var paragraphIndex int
-	var isDisambiguous bool
+func HandleUserInput(contentSel *goquery.Selection, options []Ref, isInputMode bool) {
 
 	if !isInputMode {
 		if currentArticle == nil {
 			return
 		}
-		doc = currentArticle.doc
-		paragraphIndex = currentArticle.paragraphIndex
-		isDisambiguous = currentArticle.isDisambiguous
 	}
 
-	isReadingQuery := false
 	var query string
+	isReadingQuery := false
 	shouldOverwrite := false
 
 	for {
@@ -354,8 +156,8 @@ func HandleUserInput(numberOfPages int, contentSel *goquery.Selection, options [
 		if resized {
 			if isInputMode {
 				HandleEmptyQuery("")
-			} else {
-				HandleArticle(doc, paragraphIndex, isDisambiguous)
+			} else if currentArticle != nil {
+				HandleArticle(currentArticle)
 			}
 			break
 		}
@@ -376,8 +178,8 @@ func HandleUserInput(numberOfPages int, contentSel *goquery.Selection, options [
 			case b == 27:
 				isReadingQuery = false
 				query = ""
-				if doc != nil {
-					HandleArticle(doc, paragraphIndex, isDisambiguous)
+				if currentArticle != nil {
+					HandleArticle(currentArticle)
 					return
 				} else {
 					OverwriteCurrentLine(Spaces(24), true)
@@ -387,8 +189,8 @@ func HandleUserInput(numberOfPages int, contentSel *goquery.Selection, options [
 				}
 			case s == "\n":
 				words := strings.Split(query, " ")
-				if !isInputMode && doc != nil {
-					docStack.Push(&StackItem{doc, paragraphIndex, isDisambiguous})
+				if !isInputMode && currentArticle != nil {
+					docStack.Push(currentArticle)
 				}
 				if !QueryArticle(BuildQuery(words)) {
 					query = ""
@@ -416,7 +218,7 @@ func HandleUserInput(numberOfPages int, contentSel *goquery.Selection, options [
 			s = strings.ToLower(s)
 			switch {
 			case s == "o":
-				open.Run(doc.Url.String())
+				open.Run(currentArticle.doc.Url.String())
 				break
 			case s == "q":
 				return
@@ -427,11 +229,11 @@ func HandleUserInput(numberOfPages int, contentSel *goquery.Selection, options [
 				isReadingQuery = true
 				break
 			case s == "n" || s == "\n":
-				if NextPage(doc, numberOfPages, paragraphIndex, isDisambiguous) {
+				if NextPage(currentArticle) {
 					return
 				}
 			case s == "p":
-				if PreviousPage(doc, paragraphIndex, isDisambiguous) {
+				if PreviousPage(currentArticle) {
 					return
 				}
 			case s == "b":
@@ -441,10 +243,10 @@ func HandleUserInput(numberOfPages int, contentSel *goquery.Selection, options [
 					Alert()
 				}
 			case s == "u":
-				clipboard.WriteAll(doc.Url.String())
+				clipboard.WriteAll(currentArticle.doc.Url.String())
 				break
 			case s == "t":
-				if isDisambiguous || contentSel == nil {
+				if currentArticle.isDisambiguous || contentSel == nil {
 					Alert()
 				} else {
 					clipboard.WriteAll(contentSel.Text())
@@ -456,8 +258,9 @@ func HandleUserInput(numberOfPages int, contentSel *goquery.Selection, options [
 					Alert()
 				} else {
 					if selectedDoc, succeeded := HandleRefSelection(integer, options); succeeded {
-						docStack.Push(&StackItem{doc, paragraphIndex, isDisambiguous})
-						HandleArticle(selectedDoc, 0, false)
+						docStack.Push(currentArticle)
+						selectedArticle := NewArticle(selectedDoc, 0, false)
+						HandleArticle(selectedArticle)
 						return
 					} else {
 						Alert()
@@ -468,10 +271,11 @@ func HandleUserInput(numberOfPages int, contentSel *goquery.Selection, options [
 	}
 }
 
-func NextPage(doc *goquery.Document, numberOfPages int, paragraphIndex int, isDisambiguous bool) bool {
-	if numberOfPages > paragraphIndex+1 {
-		docStack.Push(&StackItem{doc, paragraphIndex, isDisambiguous})
-		HandleArticle(doc, paragraphIndex+1, isDisambiguous)
+func NextPage(article *Article) bool {
+	if article.numberOfPages > article.paragraphIndex+1 {
+		docStack.Push(article)
+		next := NewArticle(article.doc, article.paragraphIndex+1, article.isDisambiguous)
+		HandleArticle(next)
 		return true
 	} else {
 		Alert()
@@ -479,10 +283,11 @@ func NextPage(doc *goquery.Document, numberOfPages int, paragraphIndex int, isDi
 	}
 }
 
-func PreviousPage(doc *goquery.Document, paragraphIndex int, isDisambiguous bool) bool {
-	if paragraphIndex > 0 {
-		docStack.Push(&StackItem{doc, paragraphIndex, isDisambiguous})
-		HandleArticle(doc, paragraphIndex-1, isDisambiguous)
+func PreviousPage(article *Article) bool {
+	if article.paragraphIndex > 0 {
+		docStack.Push(article)
+		prev := NewArticle(article.doc, article.paragraphIndex-1, article.isDisambiguous)
+		HandleArticle(prev)
 		return true
 	} else {
 		Alert()
@@ -509,125 +314,19 @@ func HandleRefSelection(index int, options []Ref) (*goquery.Document, bool) {
 	}
 }
 
-func GetLinkListItems(sel *goquery.Selection) *goquery.Selection {
-	return sel.Find("li").NotFunction(func(i int, sel *goquery.Selection) bool {
-		val, exists := sel.Attr("class")
-		if exists && strings.HasPrefix(val, "toclevel") {
-			return true
-		} else {
-			return false
-		}
-	})
-}
-
 func PopArticle() bool {
 	prevItem, exists := docStack.Pop()
 	if exists {
-		stackItem := prevItem.(*StackItem)
-		HandleArticle(stackItem.doc, stackItem.paragraphIndex, stackItem.isDisambiguous)
+		article := prevItem.(*Article)
+		HandleArticle(article)
 		return true
 	} else {
 		return false
 	}
 }
 
-func StartListening() {
-	signal.Notify(winResizeChan, syscall.SIGWINCH)
-
-	go func(ch chan []byte, eCh chan error) {
-		for {
-			b := make([]byte, 1)
-			_, err := os.Stdin.Read(b)
-			if err != nil {
-				eCh <- err
-				return
-			}
-			ch <- b
-		}
-	}(stdinChan, errorChan)
-}
-
-func ReadChar() (byte, bool) {
-	select {
-	case <-winResizeChan:
-		return 0, true
-		break
-	case b := <-stdinChan:
-		return b[0], false
-		break
-	case err := <-errorChan:
-		fmt.Println(err)
-		return 0, false
-		break
-	}
-	return 0, false
-}
-
-func ListenToOSSignals() {
-	c := make(chan os.Signal)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		for sig := range c {
-			fmt.Println(sig)
-			RestoreShell()
-			os.Exit(0)
-		}
-	}()
-}
-
-func ListenToWinChange() {
-	c := make(chan os.Signal, 20)
-	signal.Notify(c, syscall.SIGWINCH)
-	go func() {
-		for sig := range c {
-			fmt.Println(sig)
-		}
-	}()
-}
-
 func RestoreShell() {
-	C.rawmodeoff()
+	SetRawModeEnabled(false)
 	SetCursorVisible(true)
 	ToggleAlternateScreen(false)
-}
-
-func IsValid(text string) bool {
-	if len(text) == 0 {
-		return false
-	}
-	if strings.HasPrefix(text, "Coordinates: ") {
-		return false
-	}
-	return true
-}
-
-func GetHrefValue(s *goquery.Selection) (string, bool) {
-	val, exists := s.Attr("href")
-	titleAttr, titleExists := s.Attr("title")
-	if exists && (strings.HasPrefix(val, "/wiki/") || strings.HasPrefix(val, "/w/")) && len(s.Text()) > 1 &&
-		(!titleExists || (!strings.HasPrefix(titleAttr, "Help:IPA") && !strings.HasPrefix(titleAttr, "Wikipedia:") && !strings.HasPrefix(titleAttr, "File:"))) {
-		return val, true
-	} else {
-		return val, false
-	}
-}
-
-func SetCurrentArticle(doc *goquery.Document, paragraphIndex int, isDisambiguous bool) {
-	if currentArticle == nil {
-		currentArticle = new(StackItem)
-	}
-	currentArticle.doc = doc
-	currentArticle.paragraphIndex = paragraphIndex
-	currentArticle.isDisambiguous = isDisambiguous
-}
-
-func WikishellAscii() (str string) {
-	str = "           _ _    _     _          _ _\n" +
-		"          (_) |  (_)   | |        | | |\n" +
-		" __      ___| | ___ ___| |__   ___| | |\n" +
-		" \\ \\ /\\ / / | |/ / / __| '_ \\ / _ \\ | |\n" +
-		"  \\ V  V /| |   <| \\__ \\ | | |  __/ | |\n" +
-		"   \\_/\\_/ |_|_|\\_\\_|___/_| |_|\\___|_|_|\n"
-	return
-
 }
