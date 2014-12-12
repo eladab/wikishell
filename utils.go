@@ -148,9 +148,13 @@ func WikishellAscii() (str string) {
 
 func GetHrefValue(s *goquery.Selection) (string, bool) {
 	val, exists := s.Attr("href")
+	if !exists {
+		return val, false
+	}
+
 	titleAttr, titleExists := s.Attr("title")
-	if exists && (strings.HasPrefix(val, "/wiki/") || strings.HasPrefix(val, "/w/")) && len(s.Text()) > 1 &&
-		(!titleExists || (!strings.HasPrefix(titleAttr, "Help:IPA") && !strings.HasPrefix(titleAttr, "Wikipedia:") && !strings.HasPrefix(titleAttr, "File:"))) {
+	if (strings.HasPrefix(val, "/wiki/") || strings.HasPrefix(val, "/w/")) && len(s.Text()) > 1 &&
+		(!titleExists || (!strings.HasPrefix(titleAttr, "Help:IPA") && !strings.HasPrefix(titleAttr, "Wikipedia:") && !strings.HasPrefix(titleAttr, "File:") && !strings.Contains(val, "redlink=1"))) {
 		return val, true
 	} else {
 		return val, false
