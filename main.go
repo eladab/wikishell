@@ -324,9 +324,3 @@ func PopArticle() bool {
 		return false
 	}
 }
-
-func RestoreShell() {
-	SetRawModeEnabled(false)
-	SetCursorVisible(true)
-	ToggleAlternateScreen(false)
-}

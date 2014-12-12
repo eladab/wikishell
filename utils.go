@@ -85,6 +85,12 @@ func SetCursorVisible(visible bool) {
 	}
 }
 
+func RestoreShell() {
+	SetRawModeEnabled(false)
+	SetCursorVisible(true)
+	ToggleAlternateScreen(false)
+}
+
 func PrintCommands(winSize *WinSize) {
 	PositionCursor(0, int(winSize.Row)-2)
 	optionWidth := int((winSize.Col - 4) / 4)
