@@ -33,6 +33,7 @@ var errorChan chan error
 
 func main() {
 
+	initTerm()
 	SetRawModeEnabled(true)
 	ToggleAlternateScreen(true)
 	SetCursorVisible(false)
