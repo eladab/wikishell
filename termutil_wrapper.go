@@ -31,7 +31,7 @@ func SetRawMode() {
 		fmt.Println("Failed to get attribute")
 		return
 	}
-	termios.Cfmakeraw(&a)
+	a.Lflag &^= syscall.ECHO | syscall.ICANON
 	termios.Tcsetattr(uintptr(fd), termios.TCSANOW, (*syscall.Termios)(&a))
 }
 
